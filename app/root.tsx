@@ -1,4 +1,4 @@
-import {defer, type LoaderArgs} from '@shopify/remix-oxygen';
+import {defer, LoaderFunction, type LoaderArgs} from '@shopify/remix-oxygen';
 import {
   Links,
   Meta,
@@ -16,6 +16,12 @@ import favicon from '../public/favicon.svg';
 import resetStyles from './styles/reset.css';
 import appStyles from './styles/app.css';
 import {Layout} from '~/components/Layout';
+import {BuilderComponent, builder} from '@builder.io/react';
+import {Builder} from '@builder.io/sdk';
+
+const builderApiKey = 'd0e05baec9a84531819193f84f3e8f75';
+
+builder.init(builderApiKey);
 
 export function links() {
   return [
@@ -33,7 +39,7 @@ export function links() {
   ];
 }
 
-export async function loader({context}: LoaderArgs) {
+export async function loader({context, params, request}: LoaderArgs) {
   const {storefront, session, cart} = context;
   const customerAccessToken = await session.get('customerAccessToken');
   const publicStoreDomain = context.env.PUBLIC_STORE_DOMAIN;
@@ -63,6 +69,16 @@ export async function loader({context}: LoaderArgs) {
     },
   });
 
+  const urlPath = new URL(request.url).pathname;
+
+  const builderContentPromise = builder
+    .get('page', {
+      userAttributes: {
+        urlPath: urlPath,
+      },
+    })
+    .toPromise();
+
   return defer(
     {
       cart: cartPromise,
@@ -70,6 +86,7 @@ export async function loader({context}: LoaderArgs) {
       header: await headerPromise,
       isLoggedIn,
       publicStoreDomain,
+      builderContent: await builderContentPromise,
     },
     {headers},
   );
@@ -77,6 +94,11 @@ export async function loader({context}: LoaderArgs) {
 
 export default function App() {
   const data = useLoaderData<typeof loader>();
+
+  // console.log('data', data.builderContent);
+
+  const showBuilderContent =
+    data.builderContent || Builder.isEditing || Builder.isPreviewing;
 
   return (
     <html lang="en">
@@ -88,6 +110,9 @@ export default function App() {
       </head>
       <body>
         <Layout {...data}>
+          {showBuilderContent ? (
+            <BuilderComponent content={data.builderContent} />
+          ) : null}
           <Outlet />
         </Layout>
         <ScrollRestoration />
